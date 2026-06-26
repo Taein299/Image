@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI 스마트 캔버스 - 실사 변환</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body {
+            background: #121214;
+            color: #fff;
+            font-family: -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 360px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            background: #1a1a1e;
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid #2a2a30;
+        }
+        canvas, img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #paintCanvas { z-index: 2; }
+        #outputImage { z-index: 1; opacity: 0; object-fit: cover; transition: opacity 0.3s; }
+        input {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #3a3a42;
+            background: #222227;
+            color: #fff;
+            font-size: 1rem;
+            text-align: center;
+            outline: none;
+        }
+        .btn-group {
+            display: flex;
+            gap: 8px;
+        }
+        button {
+            flex: 1;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn-clear { background: #2a2a30; color: #ff5c5c; }
+        .btn-ai { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; flex: 2; }
+        .loading {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            font-weight: bold;
+        }
+        .loading.active { opacity: 1; pointer-events: auto; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="canvas-container">
+            <canvas id="paintCanvas"></canvas>
+            <img id="outputImage" alt="AI 결과">
+            <div id="loading" class="loading">고급 이미지로 변환 중...</div>
+        </div>
+
+        <input type="text" id="itemName" placeholder="그린 물건 이름 (예: 점퍼, 신발)" value="점퍼">
+
+        <div class="btn-group">
+            <button class="btn-clear" onclick="clearCanvas()">지우기</button>
+            <button class="btn-ai" onclick="enhanceDrawing()">실사 변환</button>
+        </div>
+    </div>
+
+    <script>
+        const paintCanvas = document.getElementById('paintCanvas');
+        const ctx = paintCanvas.getContext('2d');
+        const outputImage = document.getElementById('outputImage');
+        const loading = document.getElementById('loading');
+        const itemNameInput = document.getElementById('itemName');
+        
+        let isDrawing = false;
+
+        function initCanvas() {
+            const size = paintCanvas.parentElement.clientWidth;
+            paintCanvas.width = size;
+            paintCanvas.height = size;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = 4; // 실사 변환 시 선이 얇을수록 유리함
+            ctx.fillStyle = '#1a1a1e';
+            ctx.fillRect(0, 0, size, size);
+            ctx.strokeStyle = '#ffffff'; 
+        }
+
+        window.addEventListener('load', initCanvas);
+
+        function getPos(e) {
+            const rect = paintCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: clientX - rect.left, y: clientY - rect.top };
+        }
+
+        function start(e) { isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); }
+        function draw(e) { if (!isDrawing) return; e.preventDefault(); const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+        function stop() { isDrawing = false; }
+
+        paintCanvas.addEventListener('mousedown', start);
+        paintCanvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', stop);
+        paintCanvas.addEventListener('touchstart', start);
+        paintCanvas.addEventListener('touchmove', draw, { passive: false });
+        window.addEventListener('touchend', stop);
+
+        function clearCanvas() {
+            ctx.fillStyle = '#1a1a1e';
+            ctx.fillRect(0, 0, paintCanvas.width, paintCanvas.height);
+            outputImage.style.opacity = '0';
+            paintCanvas.style.zIndex = '2';
+        }
+
+        async function enhanceDrawing() {
+            loading.classList.add('active');
+            
+            const itemName = itemNameInput.value.trim() || '점퍼';
+
+            // 사용자가 입력한 단어(점퍼)를 실사 사진, 최고급 재질 등의 수식어와 결합
+            const enhancedPrompt = `Photorealistic, highly detailed, luxurious high-end fashion ${itemName}, realistic fabric textures, professional studio lighting, 8k resolution. Must strictly follow the shape and contours of the provided sketch.`;
+
+            try {
+                const dataURL = paintCanvas.toDataURL('image/jpeg', 0.9);
+                
+                const imageElement = await puter.ai.txt2img({
+                    prompt: enhancedPrompt,
+                    input_image: dataURL
+                });
+                
+                outputImage.src = imageElement.src;
+                
+                outputImage.onload = () => {
+                    paintCanvas.style.zIndex = '1';
+                    outputImage.style.zIndex = '2';
+                    outputImage.style.opacity = '1';
+                    loading.classList.remove('active');
+                };
+            } catch (error) {
+                alert("변환 실패. 다시 시도해라.");
+                loading.classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>
+
